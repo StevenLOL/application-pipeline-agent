@@ -22,7 +22,7 @@ MODULES = [
 
 DIRS = [
     "evals", "channel_profiles", "prompts", ".github/workflows",
-    "reports/incidents", "reports/weekly", "data", "models",
+    "reports/incidents", "reports/weekly",
 ]
 
 
@@ -58,6 +58,18 @@ def test_compliance_subpackages():
 @pytest.mark.parametrize("d", DIRS)
 def test_layout_dirs_exist(d):
     assert (REPO / d).is_dir(), f"missing directory: {d}"
+
+
+@pytest.mark.parametrize("d", ["data", "models"])
+def test_runtime_pii_dirs_are_gitignored_not_shipped(d):
+    # data/ and models/ hold runtime PII and local model assets: they are
+    # created on first run and must be gitignored, NOT part of a fresh
+    # checkout (a CI clone does not contain them — do not assert existence).
+    lines = (REPO / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert f"{d}/" in lines, f"{d}/ not gitignored"
+    tracked = _git("ls-files").splitlines()
+    leaked = [f for f in tracked if f.startswith(f"{d}/")]
+    assert not leaked, f"runtime PII directory tracked by git: {leaked}"
 
 
 def test_gitignore_excludes_pii_dirs():
