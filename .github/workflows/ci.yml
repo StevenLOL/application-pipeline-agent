@@ -27,8 +27,8 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install (dev + eval extras)
-        run: pip install -e ".[dev,eval]"
+      - name: Install (dev + eval + agent extras)
+        run: pip install -e ".[dev,eval,agent]"
 
       # Semantic gate: deepeval CLI entrypoint (DeepEval is officially Pytest-native).
       # Exit-code semantics verified locally: all-green exits 0; a broken verdict

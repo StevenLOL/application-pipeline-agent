@@ -13,6 +13,19 @@ dependencies = ["openpyxl>=3.1"]
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 eval = ["deepeval>=4.3.1"]
+# Agentic stack used by the extraction/graph/retrieval layers (dspy, langgraph,
+# mcp) plus the FAISS vector index and the rich monitor UI. Heavy optional
+# extras (spacy/presidio, sentence-transformers, python-docx/pypdf, nicegui)
+# are intentionally NOT pinned here: the test suite skips gracefully when
+# they are absent.
+agent = [
+    "numpy>=1.26",
+    "faiss-cpu>=1.8",
+    "dspy>=3.0",
+    "langgraph>=0.2",
+    "mcp>=1.0",
+    "rich>=13",
+]
 
 [project.scripts]
 apa = "apa.cli:main"
