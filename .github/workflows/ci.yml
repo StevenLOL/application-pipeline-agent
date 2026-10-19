@@ -1,18 +1,14 @@
-# APA CI (D6 / F4 evaluation gate)
-#
-# Exposure discipline (user directive 2026-10-18): this repo has no git remote;
-# configuring a remote and the first push are exposure decisions to be made
-# explicitly by the user. The workflow is archived on write; CI status is
-# "not run" until it is actually triggered.
+# APA CI (evaluation gate)
 #
 # Three gates (all locally deterministic, zero external dependencies, zero
 # accounts, zero network):
-#   1. Semantic gate (DeepEval 4.3.1 FaithfulnessMetric, replay judge) — catches
-#      semantic-level defects that literal rules miss (incident-4 type: JD
-#      checklist action items with no JD basis)
-#   2. Rule regression (F1 engine + _130 inheritance + A2/A4/A5 + F10 three rules)
-#   3. Golden set (4 numbered incident version pairs + 1 proposal-doc rule +
-#      INC-2026-1016 replay)
+#   1. Semantic gate (DeepEval FaithfulnessMetric, replay judge) — catches
+#      semantic-level defects that literal rules miss (JD checklist action
+#      items with no JD basis). Semantic case data stays in the private
+#      upstream repo (exposure discipline); this gate self-skips when the
+#      case file is absent.
+#   2. Rule regression (F1 engine + inheritance + A2/A4/A5 + F10 rules)
+#   3. Golden set (incident version pairs + proposal-doc rule + replay)
 #
 # Environment: Python 3.11 (same as conda env apa, docs/09 §7).
 name: ci
@@ -36,11 +32,18 @@ jobs:
 
       # Semantic gate: deepeval CLI entrypoint (DeepEval is officially Pytest-native).
       # Exit-code semantics verified locally: all-green exits 0; a broken verdict
-      # (sem-001 verdicts changed to yes) exits 1.
+      # (detect-case verdicts flipped) exits 1.
       # Judge defaults to replay (deterministic, CI-runnable); running llamacpp live
-      # needs APA_JUDGE_BASE_URL (D8).
+      # needs APA_JUDGE_BASE_URL.
+      # The semantic case file stays private (exposure discipline); the gate
+      # self-skips when it is not shipped, instead of failing on a missing path.
       - name: Semantic gate (DeepEval, replay judge — deterministic)
-        run: deepeval test run tests/evals/test_deepeval_golden.py
+        run: |
+          if [ -f tests/evals/test_deepeval_golden.py ]; then
+            deepeval test run tests/evals/test_deepeval_golden.py
+          else
+            echo "Semantic gate cases not shipped in this repo (exposure discipline) — skipped."
+          fi
 
       # Rule regression + golden set + F10 replay (deterministic, no judge)
       - name: Rule regression + golden set
