@@ -1,10 +1,13 @@
-"""D4：F10 三路 poller / store / scheduler / 目标构建 测试。
+"""D4: F10 tests for the three pollers / store / scheduler / target building.
 
-纪律：
-- 禁实网：全部经 FakeTransport 回放（含 S3 AccessDenied 真实形态——2026-10-18
-  对 status.careers.gov.sg 实测录制），UrllibTransport 只测非法 URL 收敛。
-- blocked ≠ outage：状态页 API 被源站拒绝是探针环境限制，不得判渠道故障。
-- 目标构建用 openpyxl 写临时台账，测筛选口径（活跃裁决/截止/脏链接）。
+Discipline:
+- No live network: everything replays through FakeTransport (including the real
+  S3 AccessDenied shape recorded on 2026-10-18 against status.careers.gov.sg);
+  UrllibTransport is only tested for converging on invalid URLs.
+- blocked != outage: a status-page API rejected by the origin is a probe
+  environment limitation and must not be judged a channel failure.
+- Target building writes a temporary ledger with openpyxl and tests the
+  filter criteria (active verdicts / deadlines / dirty links).
 """
 
 from __future__ import annotations
@@ -54,7 +57,7 @@ class TestStatuspagePoller:
         assert "incidents=1" in r.detail
 
     def test_s3_access_denied_is_blocked_not_outage(self):
-        """2026-10-18 实测形态：源站拒绝非浏览器客户端 → blocked，绝不判 outage。"""
+        """Real shape observed 2026-10-18: the origin rejects non-browser clients -> blocked, never outage."""
         r = self._poller(HttpResponse(403, S3_DENIED_BODY)).probe()[0]
         assert r.outcome == "blocked"
         assert "not a channel failure" in r.detail
@@ -102,10 +105,10 @@ class TestJobUrlPoller:
         assert r.outcome == "ok"
         assert ft.calls == [(self.URL, "HEAD"), (self.URL, "GET")]
 
-    # ---------- deep 深检（2026-10-19 用户线索「closed 标签」的实证落地） ----------
+    # ---------- deep checks (grounded in the 2026-10-19 user lead about "closed" tags) ----------
 
     def test_deep_appends_signals_without_changing_outcome(self):
-        """deep：GET 正文信号记入 detail，outcome 仍由 HEAD 判定。"""
+        """deep: GET body signals go into detail; the outcome is still decided by HEAD."""
         body = (
             "<html>Closing on 27 Oct 2026<svg>path</svg>Closed</span>"
             '<script>"datePosted":"2026-10-12"</script></html>'
@@ -122,7 +125,7 @@ class TestJobUrlPoller:
         assert ft.calls == [(self.URL, "HEAD"), (self.URL, "GET")]
 
     def test_deep_skips_body_when_head_not_ok(self):
-        """HEAD 非 ok 不再取正文（省流量，且 gone/blocked 与页面标签无关）。"""
+        """Skip the body when HEAD is not ok (saves traffic; gone/blocked ignore page tags)."""
         ft = FakeTransport({(self.URL, "HEAD"): HttpResponse(404, "")})
         r = pollers.JobUrlPoller(ft).probe_one(self.URL, deep=True)
         assert r.outcome == "gone"
@@ -130,7 +133,7 @@ class TestJobUrlPoller:
         assert ft.calls == [(self.URL, "HEAD")]
 
     def test_deep_default_off(self):
-        """默认不深检（成本纪律：HEAD 足够回答渠道在不在）。"""
+        """Deep checks off by default (cost discipline: HEAD suffices to answer channel up/down)."""
         ft = FakeTransport({
             (self.URL, "HEAD"): HttpResponse(200, ""),
             (self.URL, "GET"): HttpResponse(200, "<html>Closing on 27 Oct 2026</html>"),
@@ -141,7 +144,7 @@ class TestJobUrlPoller:
 
 
 class TestParseJobPage:
-    """parse_job_page 纯函数：信号抽取 + 不稳定标签的边界（实证 2026-10-19）。"""
+    """parse_job_page pure function: signal extraction + unstable-tag edges (verified 2026-10-19)."""
 
     def test_extracts_all_signals(self):
         body = (
@@ -162,9 +165,9 @@ class TestParseJobPage:
         assert sig.date_posted is None
 
     def test_closing_in_days_not_in_detail_ssr(self):
-        """用户观察的 'Closing in N day(s)' 不在详情页 SSR——正则不应误命中。"""
+        """'Closing in N day(s)' (user-observed) is not in the detail-page SSR; the regex must not match."""
         sig = pollers.parse_job_page("<html>Closing in 1 day(s) until ad closes</html>")
-        assert sig.closing_on is None  # 只认 "Closing on <date>" 形态
+        assert sig.closing_on is None  # only the "Closing on <date>" form counts
 
 
 class TestJobUrlPollerBatch:
@@ -189,7 +192,7 @@ class TestMaintenancePoller:
         return pollers.MaintenancePoller(self.URL, FakeTransport({(self.URL, "GET"): resp})).probe()
 
     def test_spa_shell_parse_error(self):
-        """新版 Statuspage SPA 外壳（698 字节）→ 如实记 parse_error 并说明主渠道。"""
+        """New Statuspage SPA shell (698 bytes) -> record parse_error honestly and name the main channel."""
         shell = ('<!DOCTYPE html><html><head><title>t</title></head><body>'
                  '<script src="/src/status-pages-site-E2IQLH3W.min.js"></script></body></html>')
         r = self._probe(HttpResponse(200, shell))
@@ -220,7 +223,7 @@ class TestStore:
         assert store.write_results(db, rows) == 3
         latest = store.latest_by_target(db)
         by_key = {(r["kind"], r["target"]): r for r in latest}
-        assert by_key[("job_url", "https://a/1")]["outcome"] == "gone"   # 取最新
+        assert by_key[("job_url", "https://a/1")]["outcome"] == "gone"   # latest wins
         assert by_key[("statuspage", "https://s/api")]["outcome"] == "blocked"
         assert store.count_outcomes(db) == {"ok": 1, "gone": 1, "blocked": 1}
 
@@ -228,7 +231,7 @@ class TestStore:
         assert store.write_results(tmp_path / "t.db", []) == 0
 
     def test_schema_idempotent(self, tmp_path: Path):
-        """ensure_schema 幂等：连开两次不炸（Task Scheduler 常驻重复调用）。"""
+        """ensure_schema is idempotent: opening twice in a row must not fail (Task Scheduler re-invocation)."""
         from apa import models
         db = tmp_path / "t.db"
         c1 = models.connect(db)
@@ -247,11 +250,11 @@ class TestScheduler:
         assert "/sc minute /mo 5" in by_name["APAProbeStatuspage"]
         assert "/sc minute /mo 15" in by_name["APAProbeJobs"]
         assert "/sc daily /st 08:30" in by_name["APAProbeMaintenance"]
-        assert all("/F" in c for c in by_name.values())          # 幂等覆盖
+        assert all("/F" in c for c in by_name.values())          # idempotent overwrite
         assert all("--kind" in c for c in by_name.values())
 
     def test_dry_run_returns_without_executing(self):
-        """dry-run 只返回命令清单，不调 subprocess（无 --apply 不注册）。"""
+        """dry-run only returns the command list, no subprocess calls (nothing registers without --apply)."""
         cmds = scheduler.register(apply=False)
         assert len(cmds) == 3 and all(c.command.startswith("schchts") is False for c in cmds)
 
@@ -260,15 +263,15 @@ class TestScheduler:
         assert all("/Delete" in c for c in cmds)
 
 
-# ---------- UrllibTransport 边界 ----------
+# ---------- UrllibTransport edge cases ----------
 
 def test_urllib_invalid_url_converges_not_raises():
-    """脏链接（含空格/注释）必须收敛为 error 响应——常驻任务不炸。"""
+    """Dirty links (with spaces/comments) must converge to an error response, not crash the resident job."""
     resp = UrllibTransport(timeout=5).request("https://www.proseware.example (x0pa API)")
     assert resp.status is None and resp.error is not None
 
 
-# ---------- 目标构建筛选口径 ----------
+# ---------- target-building filter criteria ----------
 
 HEADER = ["记录ID", "来源", "岗位标题", "雇主/机构", "真实链接", "抓取时间",
           "平台更新时间", "HTTP", "原文存档", "截止日期", "薪资(标头)", "雇佣类型",
@@ -301,16 +304,16 @@ class TestBuildProbeTargets:
             _row("A2", "https://jobs.careers.gov.sg/jobs/hrp/2/x", "可投",
                  (today + timedelta(days=5)).isoformat()),
             _row("A3", "https://jobs.careers.gov.sg/jobs/hrp/3/x", "可投",
-                 (today - timedelta(days=1)).isoformat()),          # 已截止剔除
-            _row("A4", "https://jobs.careers.gov.sg/jobs/hrp/4/x", "不投", None),   # 非活跃
-            _row("A5", "https://jobs.careers.gov.sg/jobs/hrp/5/x", "未评", None),   # 未裁决
+                 (today - timedelta(days=1)).isoformat()),          # past deadline, filtered out
+            _row("A4", "https://jobs.careers.gov.sg/jobs/hrp/4/x", "不投", None),   # not active
+            _row("A5", "https://jobs.careers.gov.sg/jobs/hrp/5/x", "未评", None),   # not yet adjudicated
             _row("A6", "https://jobs.careers.gov.sg/jobs/hrp/6/x", "可投", None,
-                 source="MCF"),                                       # 渠道误标由 host 纠正
-            _row("A7", "无链接", "可投", None),                        # 无 URL
-            _row("A8", "https://www.proseware.example (x0pa API)", "可投", None),  # 脏链接
-            _row("A9", "https://jobs.careers.gov.sg/jobs/hrp/1/x", "可投", None),  # 重复 URL
+                 source="MCF"),                                       # mislabeled channel corrected by host
+            _row("A7", "无链接", "可投", None),                        # no URL
+            _row("A8", "https://www.proseware.example (x0pa API)", "可投", None),  # dirty link
+            _row("A9", "https://jobs.careers.gov.sg/jobs/hrp/1/x", "可投", None),  # duplicate URL
         ]
-        # 脚本文件名以数字开头不能 import，按文件路径加载
+        # script filename starts with a digit and cannot be imported; load it by file path
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "build_targets", Path(__file__).resolve().parents[2] / "scripts" / "03_build_probe_targets.py")
@@ -331,4 +334,4 @@ class TestBuildProbeTargets:
         assert data["stats"]["malformed_url_fixed"] == 1
         assert data["stats"]["dupe_url"] == 1
         mcf = next(t for t in data["targets"] if t["jd_id"] == "A6")
-        assert mcf["channel"] == "hrp"   # host 是地面真值，纠正来源列误标
+        assert mcf["channel"] == "hrp"   # host is the ground truth; it corrects the mislabeled source column

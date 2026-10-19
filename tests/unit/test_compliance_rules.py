@@ -1,7 +1,9 @@
-"""D2 规则单测：引擎分派 + template-residue（事故1）+ number-provenance（事故3）。
+"""D2 rule unit tests: engine dispatch + template-residue (incident 1) + number-provenance (incident 3).
 
-残留规则用**注入式负例**验证：把 ACME 信的独有句子注入 Helios 信副本，
-规则必须命中——这复现事故1 的机制而非伪造"历史文件"（金标准版本对属 D3）。
+The residue rule is verified with an **injected negative**: inject the sentence
+unique to the ACME letter into a copy of the Helios letter, and the rule must
+hit — this reproduces the mechanism of incident 1 rather than faking a
+"historical file" (golden-standard version pairs belong to D3).
 """
 
 from __future__ import annotations
@@ -26,12 +28,12 @@ _ACME = ME / "CoverLetter_ACME_AI_Data_Office_EN.md"
 
 needs_singapore = pytest.mark.skipif(not _Helios.is_file(), reason="singapore 工作区不在本机")
 
-# 事故1 的残留原型句（ACME 信独有：部委数据域表述）
+# Prototype residue sentence of incident 1 (unique to the ACME letter: ministry data-domain phrasing)
 _ACME_RESIDUE = ("In a ministry the data already exists — workforce and employment data, "
                 "workplace safety and health records, foreign-manpower administration")
 
 
-# ── 引擎分派 ────────────────────────────────────────────────────────────
+# ── engine dispatch ────────────────────────────────────────────────────
 
 def test_engine_rule_kinds_and_severity():
     text = "alpha beta gamma"
@@ -55,7 +57,7 @@ def test_engine_missing_file_and_counts():
 
 
 def test_llm_rule_without_client_raises_not_silent():
-    """llm 类规则已注册但未注入客户端 → 显式报错，不静默跳过（D3 前纪律）。"""
+    """An llm-kind rule registered without an injected client -> explicit error, never a silent skip (pre-D3 discipline)."""
     from apa.compliance.engine import KIND_LLM
 
     rule = Rule(id="t-llm", code="T", desc="llm 规则", kind=KIND_LLM, hard=True,
@@ -73,7 +75,7 @@ def test_engine_report_json_roundtrip():
     assert "findings" in d["files"][0]
 
 
-# ── template-residue（事故1）────────────────────────────────────────────
+# ── template-residue (incident 1) ──────────────────────────────────────
 
 def test_fork_of():
     assert fork_of("CoverLetter_ACME_AI_Data_Office_EN.md") == "ACME"
@@ -82,11 +84,13 @@ def test_fork_of():
 
 
 def test_residue_detects_injected_fork_sentence():
-    """注入 ACME 独有句到 Helios 信 → 必须命中（事故1 机制复现）。
+    """Injecting the ACME-unique sentence into the Helios letter -> must hit (incident-1 mechanism replay).
 
-    语料用 me/ 全量 CL（真实使用形态）：多 fork 共有的头部块/共享业绩
-    自动不判独有；断言为靶向命中（残留句在/不在），不对干净信断言零命中——
-    共享业绩段可能合法触发告警，由人工复核（告警级定位）。
+    The corpus uses the full set of CLs under me/ (real usage shape): header
+    blocks / shared achievements common to multiple forks are never judged
+    unique; assertions are targeted hits (residue present / absent), and no
+    zero-hit assertion is made on a clean letter — a shared achievement block
+    may legitimately trigger an alert, left for human review (alert-level role).
     """
     if not (_Helios.is_file() and _ACME.is_file()):
         pytest.skip("singapore 不在本机")
@@ -113,7 +117,7 @@ def test_residue_detects_injected_fork_sentence():
 
 
 def test_residue_ignores_multifork_shared_achievement():
-    """多 fork 共有的真实业绩（ten percentage points）不是残留——不误报。"""
+    """A real achievement shared across multiple forks (ten percentage points) is not residue — no false positive."""
     shared = "speech-recognition accuracy improved by ten percentage points across mass-produced vehicles"
     others = {
         "CoverLetter_ACME_AI_Data_Office_EN.md": f"At Zephyr {shared}.",
@@ -129,11 +133,13 @@ def test_residue_skips_non_cl_target():
     assert template_residue_check("workforce data", corpus) == []
 
 
-# ── number-provenance（事故3）───────────────────────────────────────────
+# ── number-provenance (incident 3) ─────────────────────────────────────
 
-# D3 更新："165 tests" 已登记（2026-10-17 实跑 ragdemo：165 项 = 164 passed
-# + 1 skipped，缺真实资产包 tome-1.7.6-gfx；docs/132:4）——从"待确认"转入
-# 已登记列表。事故3 本体 "seven procurement packages" 保持未登记（金标准负例）。
+# D3 update: "165 tests" is now registered (2026-10-17 live run of ragdemo:
+# 165 items = 164 passed + 1 skipped, the real asset pack tome-1.7.6-gfx was
+# missing; docs/132:4) — moved from "to be confirmed" to the registered list.
+# The incident-3 body "seven procurement packages" stays unregistered
+# (golden-standard negative).
 @pytest.mark.parametrize("claim", ["seven procurement packages", "forty-two models"])
 def test_unregistered_quantity_flagged(claim):
     hits = number_provenance_check(f"We delivered {claim} last year.")

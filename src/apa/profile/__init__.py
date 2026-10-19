@@ -1,15 +1,18 @@
-"""R0 个人档案：吸收用户文档 → 单一事实源（docs/19 §4）。
+"""R0 personal profile: absorb user documents -> single source of truth (docs/19 §4).
 
 
-用户也能手动编辑更新，**不能让用户去手工填写**」。
+Users can also edit and update manually; **users must never be made to hand-fill
+forms**.
 
-模块分工（解析/抽取/合并严格分离，各自可单测）：
+Module split (parsing / extraction / merging strictly separated, each unit-testable):
 
-- ``models``   —— Claim（带 provenance 的事实句）/ Profile / WorkAuthorization
-- ``loader``   —— docx/pdf/txt/md/json 解析（**零 LLM、零网络**）
-- ``extract``  —— 候选发现（DSPy）+ **代码层逐字定位**（模型定位不到就丢弃）
-- ``merge``    —— 三铁律：用户修正 > 新抽取 / 细化 > 替换 / 冲突不静默
-- ``store``    —— profile.json 快照 + profile_history.jsonl 变更史（append-only）
+- ``models``   — Claim (a fact sentence carrying provenance) / Profile / WorkAuthorization
+- ``loader``   — docx/pdf/txt/md/json parsing (**zero LLM, zero network**)
+- ``extract``  — candidate discovery (DSPy) + **code-layer verbatim location** (a
+  candidate the model cannot locate is dropped)
+- ``merge``    — three iron rules: user correction > newly extracted / refinement >
+  replacement / conflicts are never silent
+- ``store``    — profile.json snapshot + profile_history.jsonl change history (append-only)
 """
 
 from .loader import Document, Segment, UnsupportedDocument, parse_dir, parse_document

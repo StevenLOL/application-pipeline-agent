@@ -1,5 +1,7 @@
 # APA — Application Pipeline Agent
 
+[![ci](https://github.com/StevenLOL/application-pipeline-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/StevenLOL/application-pipeline-agent/actions/workflows/ci.yml)
+
 **A governed job-application operations agent for Singapore — it monitors job
 portals, enforces compliance rules mined from real incidents, extracts JD facts
 with provenance, and audits every human decision. It never submits an

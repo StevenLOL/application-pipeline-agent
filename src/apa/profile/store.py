@@ -1,11 +1,14 @@
-"""R0 档案落盘：profile.json（当前真相）+ profile_history.jsonl（变更史）。
+"""R0 profile persistence: profile.json (current truth) + profile_history.jsonl (change history).
 
-**append-only 纪律**（docs/08 §6 审计面）：任何 claim 状态变化都 append 一行
-history，profile.json 只是「当前快照」。理由与 webapp 的 hitl_decisions.jsonl
-同源——UI 崩溃/误关不丢已做的修正，且「我什么时候把 X 改成 Y」永远可查。
+**Append-only discipline** (docs/08 §6 audit surface): every claim status change
+appends one history line; profile.json is just the "current snapshot". The rationale
+is the same as the webapp's hitl_decisions.jsonl — a UI crash/accidental close must
+not lose corrections already made, and "when did I change X to Y" stays queryable
+forever.
 
-隐私：档案含姓名/邮箱/电话 → 落盘在 ``data/``（gitignored）+ **入库前过
-PII 闸门**（``apa.privacy.assert_safe``），与全项目同一纪律。
+Privacy: the profile contains name/email/phone -> it is written under ``data/``
+(gitignored) + **passes the PII gate before any egress** (``apa.privacy.assert_safe``),
+the same discipline as the rest of the project.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ def _now() -> str:
 
 
 def load(path: Optional[Path] = None) -> Profile:
-    """读档案；不存在返回空 Profile（**不是错误**——首次 ingest 的正常起点）。"""
+    """Load the profile; return an empty Profile when absent (**not an error** — the normal starting point of a first ingest)."""
     p = Path(path or PROFILE_PATH)
     if not p.exists():
         return Profile()
@@ -40,7 +43,7 @@ def load(path: Optional[Path] = None) -> Profile:
 
 def save(profile: Profile, path: Optional[Path] = None,
          materialize: bool = True) -> Path:
-    """写快照。materialize=True 时先从 claim 重建 experiences 便捷视图。"""
+    """Write the snapshot. When materialize=True, first rebuild the experiences convenience view from claims."""
     from .merge import materialize_experiences
 
     if materialize:
@@ -55,7 +58,7 @@ def save(profile: Profile, path: Optional[Path] = None,
 
 def record_change(action: str, field_name: str, old: str, new: str,
                   reason: str = "", by: str = "human", path: Optional[Path] = None) -> dict:
-    """append 一行变更史（append-only）。返回写入的记录。"""
+    """Append one change-history line (append-only). Returns the written record."""
     entry = {
         "ts": _now(),
         "action": action,
@@ -73,7 +76,7 @@ def record_change(action: str, field_name: str, old: str, new: str,
 
 
 def history(n: int = 20, path: Optional[Path] = None) -> list[dict]:
-    """最近 n 条变更（CLI/UI 展示）。"""
+    """The most recent n changes (CLI/UI display)."""
     log = Path(path or HISTORY_PATH)
     if not log.exists():
         return []
@@ -88,10 +91,12 @@ def history(n: int = 20, path: Optional[Path] = None) -> list[dict]:
 
 
 def review_queue(profile: Profile, limit: int = 50) -> list[dict[str, Any]]:
-    """审阅队列：**needs_human / conflict 优先置顶**，然后未确认的 draft。
+    """Review queue: **needs_human / conflict items are pinned to the top first**,
+    then unconfirmed drafts.
 
-    排序即优先级（docs/19 §4.3）：用户最该看的不是「最不确定的 50 条」，
-    而是「挡在材料生成前面的那几条」。
+    The sort order is the priority (docs/19 §4.3): what the user should look at
+    first is not "the 50 most uncertain items" but "the few items blocking
+    material generation".
     """
     rank = {"conflict": 0, "needs_human": 1, "draft": 2, "confirmed": 3,
             "manual_override": 4}
@@ -107,7 +112,7 @@ def review_queue(profile: Profile, limit: int = 50) -> list[dict[str, Any]]:
 
 
 def summarize(profile: Profile) -> dict[str, Any]:
-    """档案概览（CLI/UI 首屏数字）——不含 PII 明文，只有计数与状态分布。"""
+    """Profile overview (the CLI/UI first-screen numbers) — no PII plaintext, only counts and status distribution."""
     by_status: dict[str, int] = {}
     for c in profile.claims.values():
         by_status[c.status.value] = by_status.get(c.status.value, 0) + 1

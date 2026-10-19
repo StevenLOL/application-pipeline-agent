@@ -255,7 +255,7 @@ def _annotate_section_evidence(blocks: list[Block]) -> list[Block]:
 def check_evidence(blocks: list[Block]) -> list[Finding]:
     """Evidence anchor: no anchor means unverified; honestly flagged uncertainty is exempt (anti-false-positive).
 
-    Anti-false-positive (caught in a self-audit measured run): section headings ("## 1. 🔴 必修") and metadata
+    Anti-false-positive (caught in a self-audit measured run): section headings ("## 1. 🔴 must-fix") and metadata
     sentences are inherently not claims; auditing them together would turn 8 of the 17 hits into noise —
     **a heading line is audited only when it contains claim-bearing vocabulary (missing/suggest/should/need/
     problem/risk/error/inconsistent)**.
@@ -399,8 +399,8 @@ def check_actionability(blocks: list[Block]) -> list[Finding]:
 def check_boundary(blocks: list[Block], text: str) -> list[Finding]:
     """Boundary crossing: advising actions that violate the iron rules → blocking level. Whole-document scan (not per entry).
 
-    Anti-false-positive (caught in a self-audit measured run): **negation-context exemption** — "禁 shell 直传中文"
-    and "禁止绕过 ops" are **prohibitions** rather than advice; flagging them amounts to punishing the
+    Anti-false-positive (caught in a self-audit measured run): **negation-context exemption** — "forbid
+    shell-direct Chinese transfer" and "bypassing ops is forbidden" are **prohibitions** rather than advice; flagging them amounts to punishing the
     rule-abiding (isomorphic with the negation-context false positive of the stage-2 A1 rule).
     """
     out: list[Finding] = []

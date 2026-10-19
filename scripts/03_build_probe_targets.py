@@ -1,19 +1,25 @@
-"""D4：从 JD 总台账抽取活跃岗位 URL → data/probe_targets.json（F10 JobUrlPoller 目标源）。
+"""D4: extract active job URLs from the JD master ledger -> data/probe_targets.json
+(target source for the F10 JobUrlPoller).
 
-数据流：singapore JD总台账.xlsx（唯一事实源，docs/116 铁律禁改）
-      → 本脚本只读抽取 → data/probe_targets.json（gitignore：投递策略属个人数据）
+Data flow: singapore JD总台账.xlsx (single source of truth, docs/116 iron rule:
+never modify) -> this script extracts read-only -> data/probe_targets.json
+(gitignored: delivery strategy is personal data).
 
-筛选口径（保守，宁少勿噪）：
-  - 裁决 ∈ {可投, 可投(待用户裁决)}：有真实投递意图的岗位才值得 15min 一探；
-    未评/备选/待核 不探（未决定投递），不投/已关闭/已投递/已投 不探（无进行时价值）
-  - 截止日期为空或 ≥ 今天（SGT）：已截止岗位的 URL 探到 200 也只是噪音
-    （2026-10-18 实测：已截止 Initech 岗 HEAD 仍 200——MCF 不撤已关闭页面）
-  - 真实链接以 http(s) 开头；按 URL 去重
+Filtering criteria (conservative: prefer fewer targets over noise):
+  - verdict in {可投, 可投(待用户裁决)}: only jobs with real delivery intent
+    are worth a 15-min probe; 未评/备选/待核 are not probed (no delivery
+    decision yet); 不投/已关闭/已投递/已投 are not probed (nothing in flight)
+  - deadline empty or >= today (SGT): probing a past-deadline job's URL to a
+    200 is just noise (measured 2026-10-18: a past-deadline Initech job still
+    returned HEAD 200 — MCF does not take down closed pages)
+  - real link starts with http(s); deduplicate by URL
 
-台账卫生信号：已截止但裁决仍为 可投 的行数计入 summary（供用户清理台账，
-不自动改台账——铁律：JD 增删查改唯一通道是 jd_registry_ops.py）。
+Ledger hygiene signal: rows already past deadline but still verdicted 可投 are
+counted in the summary (for the user to clean the ledger; the ledger is never
+modified automatically — iron rule: the only channel for JD CRUD is
+jd_registry_ops.py).
 
-用法：
+Usage:
     conda run -n apa python scripts/03_build_probe_targets.py [--ledger PATH] [--out PATH]
 """
 
@@ -38,16 +44,20 @@ DEFAULT_OUT = REPO_ROOT / "data" / "probe_targets.json"
 ACTIVE_VERDICTS = {"可投", "可投(待用户裁决)"}
 SHEET = "总台账"
 
-# 合法 URL 首部（台账单元格曾出现 "https://www.proseware.example (x0pa API)" 这类
-# 带注释脏值：取首部 URL，注释留痕不丢弃——探测要可请求，信息要可追溯）
+# Valid URL head (ledger cells have contained dirty annotated values like
+# "https://www.proseware.example (x0pa API)": take the leading URL and keep
+# the annotation as a note instead of dropping it — probes must be
+# requestable, information must stay traceable)
 _URL_RE = re.compile(r"^(https?://[^\s]+)")
 
-# 渠道分类：jobs.careers.gov.sg 主机下按 ATS 后端路径拆分——状态页把
-# HRPS / Greenhouse / Workable 当独立组件（uptime 各自计量），混为一谈会把
-# 单一后端故障错记到整个门户头上（2026-10-18 修正：workable 岗曾被归入 hrp）
+# Channel classification: under the jobs.careers.gov.sg host, split by ATS
+# backend path — the status page treats HRPS / Greenhouse / Workable as
+# separate components (uptime is measured independently); lumping them
+# together would book a single-backend outage against the whole portal
+# (fixed 2026-10-18: workable jobs used to be classified as hrp)
 HOST_CHANNEL = [
     ("mycareersfuture.gov.sg", "mcf"),
-    ("jobs.careers.gov.sg", "hrp"),          # 默认后端；下方按路径细化
+    ("jobs.careers.gov.sg", "hrp"),          # default backend; refined by path below
 ]
 
 
@@ -74,7 +84,8 @@ def classify_channel(url: str, source: str) -> str:
 
 
 def parse_deadline(value) -> date | None:
-    """截止日期宽容解析：datetime / 多种日期字符串；失败返回 None（按未知处理）。"""
+    """Lenient deadline parsing: datetime / several date string formats;
+    returns None on failure (treated as unknown)."""
     if value is None or value == "":
         return None
     if isinstance(value, datetime):
@@ -123,7 +134,7 @@ def build(ledger_path: Path) -> dict:
         if not m:
             stats["no_url"] += 1
             continue
-        url = m.group(1).rstrip(".,;)")     # 收尾标点不属于 URL
+        url = m.group(1).rstrip(".,;)")     # trailing punctuation is not part of the URL
         url_note = raw_url[len(m.group(1)):].strip()
         if url_note:
             stats["malformed_url_fixed"] += 1

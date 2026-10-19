@@ -1,17 +1,21 @@
-"""R0 审阅路由：claims → 人该管哪几条（docs/20 §2.2 判据表）。
+"""R0 review routing: claims -> which ones a human should handle (docs/20 §2.2 criteria table).
 
-**这是 docs/20 的核心实现**：路由是纯函数、可单测；UI 只渲染它给出的队列。
-这样 CLI 与 UI 行为一致（docs/11 薄指针纪律），且路由规则不必起 UI 就能验证。
+**This is the core implementation of docs/20**: routing is a pure function and
+unit-testable; the UI only renders the queue it produces. This keeps CLI and UI
+behavior identical (docs/11 thin-pointer discipline) and lets the routing rules be
+verified without ever launching a UI.
 
-设计依据（不是我的偏好，是业界反复验证的四条结论，信源见 docs/20 §1）：
-1. **审全部 = 没审**（velam：400 条/天、中位 2 秒 → 产出橡皮图章不是判断）
-   → 默认档是 ``auto``，不是「全部交给人」
-2. **路由靠判据不靠感觉**（低置信 / 高影响 / 异常 / 抽样）
-3. **policy override confidence**（高影响字段无论置信度都要人看）
-4. **把决策框起来**（给具体问句，不是通用 approve）
+Design basis (not my preferences — four conclusions repeatedly validated in the
+industry, sources in docs/20 §1):
+1. **Review everything = reviewing nothing** (velam: 400 items/day, median 2s ->
+   rubber stamps, not judgment)
+   -> the default tier is ``auto``, not "hand everything to a human"
+2. **Route by criteria, not by feel** (low confidence / high impact / anomaly / sampling)
+3. **policy override confidence** (high-impact fields get human eyes regardless of confidence)
+4. **Frame the decision** (give a concrete question, not a generic approve)
 
-本模块只做**分流与理由说明**，不做任何 claim 状态变更——变更只在
-``apa.profile.merge`` 里发生（单一写路径）。
+This module only does **triage and reason-giving**; it never mutates claim state —
+mutation happens only in ``apa.profile.merge`` (single write path).
 """
 
 from __future__ import annotations
@@ -24,34 +28,36 @@ from .models import Claim, ClaimStatus
 
 
 class Route(str, Enum):
-    """分流档位。**AUTO 是默认档**——这是把 25 条降到 0-3 条的关键。"""
+    """Triage tiers. **AUTO is the default** — this is the key to cutting 25 items down to 0-3."""
 
-    AUTO = "auto"          # 直接用，不打扰
-    CONFIRM = "confirm"    # 低成本确认（有出处可核对，非阻塞）
-    DECIDE = "decide"      # 要人拍板（冲突 / 身份 / 高影响 / 异常）
+    AUTO = "auto"          # use directly, no interruption
+    CONFIRM = "confirm"    # low-cost confirmation (source available for checking, non-blocking)
+    DECIDE = "decide"      # needs a human decision (conflict / identity / high impact / anomaly)
 
 
-#: 身份字段——**高影响**：填错身份 = 简历造假风险（A4 类事故）。
-#: 注意 work_authorization 是枚举而非布尔。
+#: Identity fields — **high impact**: a wrong identity value = resume-fraud risk (an
+#: A4-class incident). Note work_authorization is an enum, not a boolean.
 IDENTITY_FIELDS = frozenset({
     "identity.work_authorization", "identity.full_name",
     "identity.email", "identity.phone",
 })
 
-#: 高影响经历字段：组织与职位写错 = 整份材料失真。
+#: High-impact experience fields: a wrong organization or title distorts the whole document.
 HIGH_STAKE_PREFIXES = ("experiences.0.org", "experiences.0.title")
 
-#: 置信阈值：低于此值进 decide（对应 docs/20 §2.2「异常」判据）。
-#: 结构化直取（JSON Resume）给 0.9，LLM 抽取从 0.7 起，多来源印证每次 +0.1。
+#: Confidence floor: below this goes to decide (the docs/20 §2.2 "anomaly" criterion).
+#: Structured direct extraction (JSON Resume) gets 0.9; LLM extraction starts at 0.7;
+#: each multi-source corroboration adds +0.1.
 CONFIDENCE_FLOOR = 0.6
 
 
 @dataclass
 class Routed:
-    """一条 claim 的路由结果 + **人可读的判定理由**。
+    """The routing result for one claim + **a human-readable reason for the verdict**.
 
-    ``reason`` 是给用户看的「为什么这条要你管」——docs/20 §1 结论：不给
-    一堵输出墙，要说清为什么系统不确定。
+    ``reason`` is the user-facing answer to "why does this one need you" — docs/20
+    §1 conclusion: do not hand over a wall of output; explain why the system is
+    uncertain.
     """
 
     claim: Claim
@@ -79,9 +85,9 @@ class Routed:
         }
 
     def options(self) -> list[str]:
-        """冲突项给**两个具体选项**，不给「跳过」（docs/20 §2.3）。
+        """Conflicting items get **two concrete options**, never "skip" (docs/20 §2.3).
 
-        返回 [] 表示无需人选择（单来源确认 / 自动通过）。
+        Returns [] when no human choice is needed (single-source confirmation / auto pass).
         """
         if self.route is not Route.DECIDE:
             return []
@@ -90,7 +96,7 @@ class Routed:
         if incoming:
             return [self.claim.text, incoming[-1].snippet]
         if self.claim.status is ClaimStatus.NEEDS_HUMAN:
-            return [self.claim.text, ""]        # 第二项 = 「补上 / 不适用」
+            return [self.claim.text, ""]        # second item = "fill in / not applicable"
         return []
 
 
@@ -99,12 +105,12 @@ def _sources(claim: Claim) -> set[str]:
 
 
 def route_claim(claim: Claim) -> Routed:
-    """单条 claim 的路由判定（判据顺序即优先级）。"""
-    # ── 1. 人的判断优先：已确认 / 已手改 → auto ──
+    """Routing decision for a single claim (criterion order is priority order)."""
+    # ── 1. Human judgment first: already confirmed / manually edited -> auto ──
     if claim.status in (ClaimStatus.CONFIRMED, ClaimStatus.MANUAL_OVERRIDE):
         return Routed(claim, Route.AUTO, "you already settled this")
 
-    # ── 2. 冲突 → decide（理由必须具体到「哪两个值」）──
+    # ── 2. Conflict -> decide (the reason must name the two concrete values) ──
     if claim.status is ClaimStatus.CONFLICT:
         incoming = [p for p in claim.rejected_sources
                     if p.extractor == "rejected-in-reingest"]
@@ -114,43 +120,43 @@ def route_claim(claim: Claim) -> Routed:
                           f"\"{incoming[-1].snippet[:40]}\"")
         return Routed(claim, Route.DECIDE, "values conflict but the second side is gone")
 
-    # ── 3. 人工标记要补充 → decide ──
+    # ── 3. Human flagged as needing supplementation -> decide ──
     if claim.status is ClaimStatus.NEEDS_HUMAN:
         return Routed(claim, Route.DECIDE, "you flagged this as incomplete")
 
-    # ── 4. 无出处 = 幻觉 → decide（无论置信度）──
+    # ── 4. No provenance = hallucination -> decide (regardless of confidence) ──
     if not claim.provenance:
         return Routed(claim, Route.DECIDE,
                       "no source in your documents — I cannot show you where this came from")
 
-    # ── 5. 身份字段 → decide（policy override confidence，docs/20 §1 结论 2）──
+    # ── 5. Identity field -> decide (policy override confidence, docs/20 §1 conclusion 2) ──
     if claim.field in IDENTITY_FIELDS:
         return Routed(claim, Route.DECIDE,
                       "identity field — a wrong value here is a false claim")
 
-    # ── 6. 异常低置信 → decide ──
+    # ── 6. Abnormally low confidence -> decide ──
     if claim.confidence < CONFIDENCE_FLOOR:
         return Routed(claim, Route.DECIDE,
                       f"low confidence ({claim.confidence:.2f})")
 
-    # ── 7. 多来源印证 → auto ──
+    # ── 7. Multi-source corroboration -> auto ──
     srcs = _sources(claim)
     if len(srcs) > 1:
         return Routed(claim, Route.AUTO, f"{len(srcs)} documents agree")
 
-    # ── 8. 高影响经历字段 + 仅单来源 → decide（高影响期望代价）──
+    # ── 8. High-impact experience field + single source only -> decide (high-impact expected cost) ──
     if claim.field.startswith(HIGH_STAKE_PREFIXES):
         return Routed(claim, Route.DECIDE,
                       "organisation and title carry the most weight in a CV — "
                       "worth your eyes")
 
-    # ── 9. 剩余单来源 → confirm（低成本，不阻塞）──
+    # ── 9. Remaining single source -> confirm (low cost, non-blocking) ──
     return Routed(claim, Route.CONFIRM,
                   f"single source: {next(iter(srcs))} — skim if curious")
 
 
 def route_all(claims: Iterable[Claim]) -> list[Routed]:
-    """全部 claim → 路由结果，按 decide → confirm → auto 排序。"""
+    """All claims -> routing results, sorted decide -> confirm -> auto."""
     order = {Route.DECIDE: 0, Route.CONFIRM: 1, Route.AUTO: 2}
     return sorted((route_claim(c) for c in claims),
                   key=lambda r: (order[r.route], r.field))
@@ -158,7 +164,7 @@ def route_all(claims: Iterable[Claim]) -> list[Routed]:
 
 @dataclass
 class ReviewQueue:
-    """审阅队列视图（UI 与 CLI 共用同一结构）。"""
+    """Review-queue view (UI and CLI share the same structure)."""
 
     decide: list[Routed] = field(default_factory=list)
     confirm: list[Routed] = field(default_factory=list)
@@ -173,16 +179,18 @@ class ReviewQueue:
         return len(self.decide)
 
     def escalation_rate(self) -> float:
-        """escalation rate（docs/20 §6 健康指标）。
+        """Escalation rate (docs/20 §6 health metric).
 
-        >50%  = 路由失效，瓶颈被重建（velam 的「you've rebuilt the bottleneck」）
-        <1%   = 信号睡着了（不是「任务简单」——那是更常见的解释，要去查）
+        >50%  = routing is failing, the bottleneck was rebuilt (velam's
+                "you've rebuilt the bottleneck")
+        <1%   = the signal has fallen asleep (not "the task is easy" — that is the
+                more common explanation and must be investigated)
         """
         return (len(self.decide) / self.total) if self.total else 0.0
 
 
 def build_queue(profile: Any) -> ReviewQueue:
-    """Profile → 审阅队列。"""
+    """Profile -> review queue."""
     routed = route_all(profile.claims.values())
     q = ReviewQueue()
     for r in routed:
@@ -196,7 +204,7 @@ def build_queue(profile: Any) -> ReviewQueue:
 
 
 def health_metrics(queue: ReviewQueue) -> dict[str, Any]:
-    """路由健康度（docs/20 §6）。**CLI 侧，不进 UI**（监控归 Rich 层）。"""
+    """Routing health (docs/20 §6). **CLI-side only, never shown in the UI** (monitoring belongs to the Rich layer)."""
     rate = queue.escalation_rate()
     if queue.total == 0:
         verdict = "no claims yet"

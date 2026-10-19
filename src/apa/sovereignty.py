@@ -66,7 +66,7 @@ def material_fingerprint(text: str) -> str:
 
 @dataclass
 class SovereigntyStatus:
-    """一次操作（或一次会话）的数据主权状态。"""
+    """The data-sovereignty state of one operation (or one session)."""
 
     state: SovereigntyState
     backend: str = "unknown"
@@ -120,7 +120,7 @@ def current_status(settings: Any = None) -> SovereigntyStatus:
         from .llm.client import load_settings
 
         s = settings if settings is not None else load_settings()
-    except Exception as exc:                     # noqa: BLE001 - 未配置不是错误状态
+    except Exception as exc:                     # noqa: BLE001 - unconfigured is not an error state
         return SovereigntyStatus(SovereigntyState.UNKNOWN,
                                  note=f"LLM not configured ({exc})")
 

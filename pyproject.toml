@@ -23,7 +23,8 @@ agent = [
     "faiss-cpu>=1.8",
     "dspy>=3.0",
     "langgraph>=0.2",
-    "mcp>=1.0",
+    "langgraph-checkpoint-sqlite>=2",
+    "mcp>=1,<2",
     "rich>=13",
 ]
 

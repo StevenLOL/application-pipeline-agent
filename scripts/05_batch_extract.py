@@ -1,17 +1,22 @@
-"""scripts/05_batch_extract.py — F3 批量抽取 + 一致率表 + 台账交叉验证（D10）。
+"""scripts/05_batch_extract.py — F3 batch extraction + agreement table + ledger cross-validation (D10).
 
-职责（docs/10 D10 验收：「对 10+ 份历史 JD 抽取，一致率表出」）：
-1. 扫 singapore/jobs/投递包/*/JD.md（只读），取「## JD 原文」段与头部记录 ID；
-2. 对每份 JD：deadline 跑 5-run（measured唯一可靠目标）；
-   requirements/assessments 各 1-run（1.5B 已知边界，仅记录 schema 状态——
-   reports/f3/run_001.md）；
-3. **台账交叉验证**：抽取的 deadline vs 台账「截止日期」（只读 openpyxl）——
-   一致/不一致/台账缺值 三态；这是「F3 对齐台账 schema」的实质：抽取结果
-   字段语义对齐台账列（记录ID/截止日期）；
-4. needs_human 行落 `data/extraction_review.json`（低置信人工队列，docs/08 §6）；
-5. 一致率表打印 + markdown 落 `reports/f3/run_002.md`。
+Responsibilities (docs/10 D10 acceptance: "extract from 10+ historical JDs,
+produce the agreement table"):
+1. Scan singapore/jobs/投递包/*/JD.md (read-only), take the "## JD 原文" section
+   and the record ID from the header;
+2. For each JD: deadline runs 5-run (measured: the only reliably extractable
+   target); requirements/assessments run 1-run each (known 1.5B limit — only
+   the schema status is recorded — reports/f3/run_001.md);
+3. **Ledger cross-validation**: extracted deadline vs the ledger's "截止日期"
+   (read-only openpyxl) — three states: match / mismatch / ledger value
+   missing; this is the substance of "F3 aligns with the ledger schema": the
+   extracted field semantics line up with the ledger columns
+   (record ID / deadline);
+4. needs_human rows land in `data/extraction_review.json` (low-confidence
+   human review queue, docs/08 §6);
+5. Print the agreement table + write markdown to `reports/f3/run_002.md`.
 
-用法（仓库根目录，conda env apa，llama-server 8080）：
+Usage (repo root, conda env apa, llama-server on 8080):
   python scripts/05_batch_extract.py [--limit N] [--out reports/f3/run_002.md]
 """
 
@@ -41,7 +46,7 @@ _DEADLINE_HEADER_RE = re.compile(r"\*\*🔴 截止日期\*\*\s*\|\s*\*\*([^*]+)\
 
 
 def collect_jds(limit: int) -> list[dict]:
-    """扫投递包，返回 [{jd_id, path, jd_text, header_deadline}]。"""
+    """Scan the delivery packages; return [{jd_id, path, jd_text, header_deadline}]."""
     out = []
     for jd_path in sorted(PACKAGES_DIR.glob("*/JD.md")):
         text = jd_path.read_text(encoding="utf-8", errors="replace")
@@ -62,7 +67,7 @@ def collect_jds(limit: int) -> list[dict]:
 
 
 def load_ledger_deadlines() -> dict[str, str]:
-    """台账（只读）：记录ID → 截止日期原文。"""
+    """Ledger (read-only): record ID -> raw deadline text."""
     import openpyxl
 
     if not LEDGER_XLSX.exists():
@@ -78,16 +83,19 @@ def load_ledger_deadlines() -> dict[str, str]:
 
 
 def compare_with_ledger(extracted: str, ledger_value: str) -> str:
-    """抽取值 vs 台账值 三态：match / mismatch / ledger-missing。
+    """Three states comparing the extracted value vs the ledger value:
+    match / mismatch / ledger-missing.
 
-    台账截止粒度为日期或「页面未公布」类文本；抽取值为 YYYY-MM-DD 或
-    NOT_PUBLISHED。比较在规范化后进行（台账含时间则取日期部分）。
+    Ledger deadlines have day granularity or are "page not published"-style
+    text; the extracted value is YYYY-MM-DD or NOT_PUBLISHED. The comparison
+    happens after normalization (if the ledger value includes a time, take
+    the date part).
     """
     ledger = (ledger_value or "").strip()
     if not ledger or ledger in ("-", "None"):
         return "ledger-missing"
     if extracted == "NOT_PUBLISHED":
-        # 台账写「页面未公布」类文本视为一致
+        # ledger text like "page not published" counts as a match
         return "match" if ("未公布" in ledger or "WORKABLE" in ledger.upper()) else "mismatch"
     led_norm = normalize_date(ledger) or ledger.split(" ")[0]
     return "match" if led_norm == extracted else "mismatch"
@@ -134,7 +142,7 @@ def main() -> int:
             "schema_errors": dict(result.schema_errors),
         })
 
-    # 一致率表
+    # agreement table
     n_match = sum(1 for r in rows if r["ledger_compare"] == "match")
     n_mismatch = sum(1 for r in rows if r["ledger_compare"] == "mismatch")
     n_missing = sum(1 for r in rows if r["ledger_compare"] == "ledger-missing")
@@ -187,7 +195,7 @@ def main() -> int:
     print(f"汇总：满一致率 {n_full_agree}/{len(rows)}；match {n_match}/"
           f"mismatch {n_mismatch}/missing {n_missing}；needs_human {n_needs_human}")
 
-    # 低置信人工队列
+    # low-confidence human review queue
     REVIEW_QUEUE.parent.mkdir(parents=True, exist_ok=True)
     review = [
         {"jd_id": r["jd_id"], "schema_errors": r["schema_errors"],

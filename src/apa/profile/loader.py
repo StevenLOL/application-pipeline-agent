@@ -1,17 +1,20 @@
-"""R0 文档解析器：docx / pdf / txt / md / json_resume → 统一 Document（docs/19 §4.2 ①）。
+"""R0 document parser: docx / pdf / txt / md / json_resume -> unified Document (docs/19 §4.2 ①).
 
-**纯函数、零 LLM、零网络**——解析是确定性的，抽取才是模型的事。这个分离让
-解析层可完整单测，也让「抽取失败可重试而不必重解析」。
+**Pure functions, zero LLM, zero network** — parsing is deterministic; extraction is
+the model's job. This separation makes the parsing layer fully unit-testable, and
+lets "a failed extraction be retried without re-parsing".
 
-各格式的 locator 语义（见 ``models.Provenance``）：
-- txt/md：``chars a-b``（全文字符区间，可直接高亮）
-- docx：``para N``（python-docx 段落序号，0-based；表格另标 ``table N row M``）
-- pdf：``page N``（1-based）
-- json_resume：``/work/0/highlights/1``（JSON 指针）
+Per-format locator semantics (see ``models.Provenance``):
+- txt/md: ``chars a-b`` (whole-text character range, directly highlightable)
+- docx: ``para N`` (python-docx paragraph index, 0-based; tables are additionally
+  marked ``table N row M``)
+- pdf: ``page N`` (1-based)
+- json_resume: ``/work/0/highlights/1`` (JSON pointer)
 
-**扫描件 PDF 明确不支持**（docs/19 §9-5）：pypdf 只抽文本层，图片型 PDF 会
-产出空文本——此时**抛错并说清**，不假装成功（假成功会写出空 profile，
-比失败更难发现）。
+**Scanned PDFs are explicitly unsupported** (docs/19 §9-5): pypdf only extracts the
+text layer; image-only PDFs yield empty text — in that case **raise and say so**,
+never pretend success (a fake success writes an empty profile, which is harder to
+notice than a failure).
 """
 
 from __future__ import annotations
@@ -25,15 +28,17 @@ from .models import DocFormat
 
 
 class UnsupportedDocument(ValueError):
-    """不支持的格式 / 扫描件 PDF——错误消息必须可操作（docs/19 §6 F4）。"""
+    """Unsupported format / scanned PDF — the error message must be actionable (docs/19 §6 F4)."""
 
 
 @dataclass
 class Segment:
-    """文档的一个可定位片段。
+    """One locatable fragment of a document.
 
-    ``_start``/``_end`` 是全文字符区间（内部索引，由 ``extract._attach_segments``
-    计算，不落盘）——UI 用它把 snippet 高亮回原文，provider 用它换成段级 locator。
+    ``_start``/``_end`` are whole-text character ranges (internal indices, computed
+    by ``extract._attach_segments``, never persisted) — the UI uses them to highlight
+    the snippet back into the source, and providers use them to swap in segment-level
+    locators.
     """
 
     text: str
@@ -44,13 +49,13 @@ class Segment:
 
 @dataclass
 class Document:
-    """解析后的统一文档视图。"""
+    """The parsed, unified document view."""
 
     path: Path
     fmt: DocFormat
     text: str
     segments: list[Segment] = field(default_factory=list)
-    tables: list[str] = field(default_factory=list)   # docx 表格转出的文本块
+    tables: list[str] = field(default_factory=list)   # text blocks converted out of docx tables
     meta: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -59,7 +64,7 @@ class Document:
 
 
 def detect_format(path: Path) -> DocFormat:
-    """按后缀判定格式（未知后缀 → UNSUPPORTED，错误消息给出支持清单）。"""
+    """Decide the format by file suffix (unknown suffix -> UNSUPPORTED; the error message lists what is supported)."""
     suffix = path.suffix.lower().lstrip(".")
     if suffix == "docx":
         return DocFormat.DOCX
@@ -83,11 +88,12 @@ _ENCODINGS = ("utf-8-sig", "utf-8", "utf-16", "cp1252", "latin-1")
 
 
 def _decode(raw: bytes) -> tuple[str, str]:
-    """编码嗅探（返回 (文本, 命中的编码)）。
+    """Encoding sniffing (returns (text, encoding that matched)).
 
-    顺序固定：utf-8-sig → utf-8 → utf-16 → cp1252 → latin-1（latin-1 永不失败，
-    是最后的兜底；用户文档里 GBK/繁体中文会在 cp1252 处解出乱码但**不崩**，
-    审阅台靠 snippet 高亮让人看出来）。
+    The order is fixed: utf-8-sig -> utf-8 -> utf-16 -> cp1252 -> latin-1 (latin-1
+    never fails and is the last-resort fallback; GBK/traditional-Chinese user
+    documents decode into mojibake at cp1252 but **do not crash** — the review
+    console relies on snippet highlighting to make that visible to a human).
     """
     for enc in _ENCODINGS:
         try:
@@ -110,17 +116,19 @@ _MD_NOISE = re.compile(r"^\s*(?:```|~~~|\||-{3,}\s*$|>|\*\*\d{4}\*\*\s*$)")
 
 
 def parse_md(path: Path) -> Document:
-    """Markdown：保留结构标记（标题层级/列表符），去掉代码围栏与表格对齐噪声。
+    """Markdown: keep structural markers (heading levels / list bullets), drop code
+    fences and table-alignment noise.
 
-    不做完整 CommonMark 解析——简历 md 的形态就那几种（标题+列表+表格），
-    过度解析反而丢信息。代码块内容**保留**（用户的技术项目文档常把量化指标
-    写在代码注释里）。
+    No full CommonMark parsing — resume md comes in only a few shapes (headings +
+    lists + tables), and over-parsing loses information. Code block contents are
+    **kept** (users' technical project documents often put quantified metrics in
+    code comments).
     """
     doc = parse_txt(path)
     kept: list[str] = []
     for line in doc.text.splitlines():
         if re.match(r"^\s*```", line):
-            kept.append(line)          # 围栏行保留为定位锚点，内容照常收
+            kept.append(line)          # fence lines kept as location anchors; content collected as usual
             continue
         kept.append(line)
     text = "\n".join(kept)
@@ -133,15 +141,17 @@ def parse_md(path: Path) -> Document:
 # ---- docx ----
 
 def parse_docx(path: Path) -> Document:
-    """python-docx：段落 + 表格。
+    """python-docx: paragraphs + tables.
 
-    表格单独转文本块并进 ``tables``（简历里的「技能矩阵表」常是 ATS 最难读的
-    部分，docs/19 §9-4：**不写专用表格解析器**，整体转文本交 LLM，实测出问题
-    再加）。段落里样式为 List Bullet/List Number 的作为 bullet 线索。
+    Tables are converted into separate text blocks and added to ``tables`` (the
+    "skills matrix" table in a resume is often the hardest part for ATS to read;
+    docs/19 §9-4: **no dedicated table parser** — convert wholesale to text and
+    hand it to the LLM; add one only if real-world use shows problems). Paragraphs
+    whose style is List Bullet/List Number serve as bullet cues.
     """
     try:
         import docx  # type: ignore
-    except ImportError as exc:  # pragma: no cover - 环境缺依赖
+    except ImportError as exc:  # pragma: no cover - environment missing the dependency
         raise UnsupportedDocument(
             "reading .docx needs python-docx: pip install python-docx") from exc
 
@@ -183,9 +193,9 @@ def parse_docx(path: Path) -> Document:
 # ---- pdf ----
 
 def parse_pdf(path: Path) -> Document:
-    """pypdf：逐页 text_extraction，locator = ``page N``（1-based）。
+    """pypdf: per-page text_extraction, locator = ``page N`` (1-based).
 
-    扫描件（无文本层）**明确报错**——见模块 docstring。
+    Scanned files (no text layer) **raise explicitly** — see the module docstring.
     """
     try:
         from pypdf import PdfReader  # type: ignore
@@ -199,7 +209,7 @@ def parse_pdf(path: Path) -> Document:
     for pno, page in enumerate(reader.pages, start=1):
         try:
             t = (page.extract_text() or "").strip()
-        except Exception:                          # noqa: BLE001 - 个别页会抛
+        except Exception:                          # noqa: BLE001 - individual pages can raise
             t = ""
         if not t:
             continue
@@ -215,13 +225,15 @@ def parse_pdf(path: Path) -> Document:
                     meta={"pages": str(len(reader.pages))})
 
 
-# ---- json resume（标准格式直入，免抽取） ----
+# ---- json resume (standard format ingested directly, no extraction) ----
 
 def parse_json_resume(path: Path) -> Document:
-    """JSON Resume（v1.x）：解析成文本视图走同一条抽取管线，但保留 JSON 指针。
+    """JSON Resume (v1.x): parsed into a text view that runs through the same
+    extraction pipeline, but JSON pointers are preserved.
 
-    保留指针让「同一份 resume.json 二次导入」也能做多来源印证——这是 docs/19
-    §4.4「不自己发明第五个 schema」的对称面：既进得去，也出得来。
+    Keeping the pointers means even "re-importing the same resume.json" can do
+    multi-source corroboration — the symmetric side of docs/19 §4.4 "do not invent
+    a fifth schema of our own": it can go in, and it can come back out.
     """
     raw = path.read_text(encoding="utf-8")
     try:
@@ -261,7 +273,7 @@ _PARSERS = {
 
 
 def parse_document(path: Path) -> Document:
-    """按后缀分派解析器。未知格式 → UnsupportedDocument（含支持清单）。"""
+    """Dispatch a parser by file suffix. Unknown format -> UnsupportedDocument (with the supported list)."""
     fmt = detect_format(path)
     if fmt is DocFormat.UNSUPPORTED or fmt not in _PARSERS:
         raise UnsupportedDocument(
@@ -270,10 +282,11 @@ def parse_document(path: Path) -> Document:
 
 
 def parse_dir(directory: Path, recursive: bool = True) -> tuple[list[Document], list[tuple[Path, str]]]:
-    """批量解析目录。返回 (成功文档, [(失败路径, 原因)])。
+    """Parse a directory in batch. Returns (successful documents, [(failed path, reason)]).
 
-    单个文件失败**不中断整批**——用户一次丢 5 份文档，1 份是扫描件不该让
-    其余 4 份白跑；失败项原样返回给 CLI/UI 展示（docs/19 §6 F4）。
+    A single file failing **does not abort the batch** — when a user drops 5
+    documents at once, 1 scanned file should not waste the other 4; failures are
+    returned as-is for the CLI/UI to display (docs/19 §6 F4).
     """
     docs: list[Document] = []
     failures: list[tuple[Path, str]] = []
