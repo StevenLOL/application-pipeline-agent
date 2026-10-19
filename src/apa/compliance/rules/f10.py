@@ -11,7 +11,7 @@ returns [] for non-JSON text (the rules do not apply to non-queue files — when
 CLs/resumes, this group silently skips).
 
 Severity: all three are hard — they all occur at the threshold of "about to submit"; letting one through
-re-enacts INC-2026-1016 (no buffer period colliding with a maintenance window) / INC-2026-1015
+re-enacts INC-SYNTH-1016 (no buffer period colliding with a maintenance window) / INC-SYNTH-1015
 (aggregator-site caliber drift).
 """
 
@@ -29,7 +29,7 @@ from ..engine import Rule
 # MCF is an employment job bank, not a submission portal, so it is not in this group (its deadline-drift
 # risk belongs to the aggregator rules).
 GOV_CHANNELS = {"hrp", "hrp-greenhouse", "hrp-workable"}
-# Personal-deadline buffer for gov-portal roles (post-INC-2026-1016 caliber: official deadline −48h)
+# Personal-deadline buffer for gov-portal roles (post-INC-SYNTH-1016 caliber: official deadline −48h)
 DEADLINE_BUFFER = timedelta(hours=48)
 
 RULE_DEADLINE_BUFFER = "deadline-buffer"
@@ -70,7 +70,7 @@ def _check_deadline_buffer(text: str) -> list[tuple[int, str]]:
             continue
         if personal is None:
             out.append((0, f"[{jd}] gov-portal role is missing personal_deadline"
-                           f" (should be official deadline −48h; INC-2026-1016 lesson)"))
+                           f" (should be official deadline −48h; INC-SYNTH-1016 lesson)"))
         elif personal > official - DEADLINE_BUFFER:
             out.append((0, f"[{jd}] personal_deadline {personal.isoformat()} is later than "
                            f"official deadline −48h ({official - DEADLINE_BUFFER:%Y-%m-%d %H:%M})"))
@@ -119,11 +119,11 @@ def f10_rules() -> list[Rule]:
         Rule(id=RULE_DEADLINE_BUFFER, code="F10-1",
              desc="gov-portal roles must have a personal_deadline (official deadline −48h)",
              kind="lambda", fn=_check_deadline_buffer, hard=True,
-             provenance="INC-2026-1016 (the maintenance window swallowed 16 same-day-deadline roles; staged development plan, stage 5)"),
+             provenance="INC-SYNTH-1016 (the maintenance window swallowed 16 same-day-deadline roles; staged development plan, stage 5)"),
         Rule(id=RULE_PORTAL_HEALTH_GATE, code="F10-2",
              desc="channel health must pass before ready-to-submit (a non-healthy snapshot blocks)",
              kind="lambda", fn=_check_portal_health_gate, hard=True,
-             provenance="INC-2026-1016 (portal-health-gate, planning doc section 5 rule catalog)"),
+             provenance="INC-SYNTH-1016 (portal-health-gate, planning doc section 5 rule catalog)"),
         Rule(id=RULE_CHANNEL_DIVERGENCE, code="F10-3",
              desc="aggregator deadline ≠ original; a government role going through an aggregator is a direct violation",
              kind="lambda", fn=_check_channel_divergence, hard=True,

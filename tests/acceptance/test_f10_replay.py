@@ -1,4 +1,4 @@
-"""Acceptance: INC-2026-1016 timeline replay (evals/f10/replay_inc2026_1016.json).
+"""Acceptance: INC-SYNTH-1016 timeline replay (evals/f10/replay_inc_synth_1016.json).
 
 Golden replay: fixture (real postings + reconstructed probe timeline) →
 probe_log (temp DB) → state machine → incidents registration → affected list
@@ -20,7 +20,7 @@ import pytest
 from apa.f10 import statemachine as sm, store
 from apa.f10.pollers import ProbeResult
 
-FIXTURE = Path(__file__).resolve().parents[2] / "evals" / "f10" / "replay_inc2026_1016.json"
+FIXTURE = Path(__file__).resolve().parents[2] / "evals" / "f10" / "replay_inc_synth_1016.json"
 pytestmark = pytest.mark.skipif(
     not FIXTURE.exists(),
     reason="replay fixture holds real incident data (public repo: synthetic rebuild pending)",

@@ -18,7 +18,7 @@
 ## Form fields (known set — large tenant variance)
 
 - Standard Workday flow: personal info -> work experience (**segment-by-segment textareas, often with no maxlength attribute** — limits surface via submit errors = "measured" state) -> education -> questionnaire (screening questions, **enum/free-text mixed**) -> self-identification (demographics, skippable) -> resume upload
-- **The questionnaire is the biggest variable**: MCF screening-question conventions (INC-2026-1015 evidence: one form had a skills/competency table + 256-char cap per experience segment)
+- **The questionnaire is the biggest variable**: MCF screening-question conventions (INC-SYNTH-1015 evidence: one form had a skills/competency table + 256-char cap per experience segment)
 - **External form manual re-entry**: the agent fills no fields (F11 division-of-labour red line) — draft candidates + user manual entry + final-text re-check
 
 ## Limit discovery (three states)

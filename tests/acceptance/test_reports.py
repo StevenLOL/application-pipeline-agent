@@ -1,6 +1,6 @@
 """Acceptance: existence and key facts of the three reports (reports/).
 
-Status bits are designed to evolve: INC-2026-1016 should move from OPEN to
+Status bits are designed to evolve: INC-SYNTH-1016 should move from OPEN to
 CLOSED once the 2026-10-19 08:00 maintenance window closes and the backfill is
 written back — the test accepts either legal status but requires each to be
 structurally complete.
@@ -20,7 +20,7 @@ WEEKLY = REPO / "reports/weekly"
 # Incident reports contain real application data and are NOT shipped in the
 # public repo (exposure discipline) — skip gracefully when absent.
 pytestmark = pytest.mark.skipif(
-    not (INCIDENTS / "INC-2026-1015.md").exists(),
+    not (INCIDENTS / "INC-SYNTH-1015.md").exists(),
     reason="incident reports not present (public repo: sanitized versions pending)",
 )
 
@@ -32,7 +32,7 @@ def _status_of(path: Path) -> str:
 
 
 def test_incident_1015_closed_with_corrections():
-    p = INCIDENTS / "INC-2026-1015.md"
+    p = INCIDENTS / "INC-SYNTH-1015.md"
     assert p.is_file()
     assert _status_of(p) == "CLOSED"
     text = p.read_text(encoding="utf-8")
@@ -42,7 +42,7 @@ def test_incident_1015_closed_with_corrections():
 
 
 def test_incident_1016_status_and_window():
-    p = INCIDENTS / "INC-2026-1016.md"
+    p = INCIDENTS / "INC-SYNTH-1016.md"
     assert p.is_file()
     status = _status_of(p)
     assert status in ("OPEN", "CLOSED"), f"illegal status: {status}"

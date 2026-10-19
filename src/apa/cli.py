@@ -506,7 +506,7 @@ def _cmd_status() -> int:
     print("P0 declared usable: serving real submission final-review (see reports/evals/run_001/)")
     print("D4-D5 F10: 3 pollers live + state machine (2-consecutive debounce, per-target series)"
           " + affected list (LOST/AT-RISK/RECOVERABLE) + 3 queue rules;"
-          " INC-2026-1016 replay green (evals/f10/)")
+          " INC-SYNTH-1016 replay green (evals/f10/)")
     print("D6 F4: DeepEval 4.3.1 FaithfulnessMetric gate in pytest (replay judge default,"
           " deterministic; llamacpp/openai opt-in) - sem-001 dirty 0.5 CAUGHT vs sem-002"
           " control 1.0 PASSED; judge discipline rule 1 + versions in reports/evals/run_002/judge_config.md")

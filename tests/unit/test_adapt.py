@@ -19,7 +19,7 @@ from apa.adapt import (
 )
 from apa.compliance.rules import get_rules
 
-# package-02 scenario reconstruction (INC-2026-1015: each work-experience
+# package-02 scenario reconstruction (INC-SYNTH-1015: each work-experience
 # segment ≤256 characters)
 INCIDENT_TEXT = (
     "At Zephyr's Central Research Institute I directed AI and digital-transformation "

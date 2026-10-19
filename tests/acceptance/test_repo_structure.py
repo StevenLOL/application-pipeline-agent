@@ -72,8 +72,9 @@ def test_pii_dirs_not_tracked_by_git():
     assert not leaked, f"PII directories tracked by git: {leaked}"
 
 
-def test_git_history_contains_d1():
-    log = _git("log", "--oneline")
+def test_git_history_present():
+    # The public repo ships a deliberately squashed single-root history
+    # (exposure discipline: no pre-sanitization commits may be reachable),
+    # so only presence is asserted — not any internal milestone markers.
     count = int(_git("rev-list", "--count", "HEAD").strip())
-    assert count >= 2, f"commit count {count} < 2 (expected at least two commits: skeleton + report)"
-    assert "D1" in log, "no commit containing D1 found in git history"
+    assert count >= 1, "git history is empty"

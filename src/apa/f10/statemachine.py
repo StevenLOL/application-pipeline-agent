@@ -14,7 +14,7 @@ single unreachable (transient SSL jitter, re-probe returned 200 twice) - a
 channel-level aggregation would have counted "2 consecutive bad" and mis-entered
 degraded/outage; with per-target series + 2-consecutive confirmation, each
 one-off failure is a single observation, no transition fires, and the channel
-stays healthy. During a real portal outage (INC-2026-1016) every target keeps
+stays healthy. During a real portal outage (INC-SYNTH-1016) every target keeps
 failing and every series confirms escalation - detection sensitivity is
 unaffected; jitter resistance comes from granularity, not thresholds.
 

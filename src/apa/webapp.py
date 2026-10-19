@@ -511,13 +511,13 @@ def _draft_panel(head: dict[str, Any], analysis: dict[str, Any]) -> None:
              "never adds. Edit both boxes as much as you like, then re-check."
              ).classes("text-xs text-grey-6 q-mb-sm")
 
-    # Limit input (INC-2026-1015 instance: one form capped each work-experience
+    # Limit input (INC-SYNTH-1015 instance: one form capped each work-experience
     # segment at 256; it varies per job - when unknown, measure first, then
     # generate: the F11 philosophy)
     with ui.row().classes("items-end gap-2 q-mb-sm"):
         limit_in = ui.number("per-segment character limit", value=256,
                              min=1, step=16).classes("w-40")
-        ui.label("measured from this form (INC-2026-1015 shape) — change it "
+        ui.label("measured from this form (INC-SYNTH-1015 shape) — change it "
                  "per form").classes("text-xs text-grey-6")
 
     from .profile.store import load as load_profile
