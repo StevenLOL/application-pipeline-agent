@@ -1,0 +1,53 @@
+{
+  "version": "synthetic-v1",
+  "built_by": "hand-authored for the public repo (no real data; all companies/projects fictional)",
+  "purpose": "Regression corpus for the public release: mirrors the SHAPE of the five private incident families (A1 template residue, A2 cross-block dupe, A3 number provenance, A4 claim verification, A5 ledger consistency) with fully synthetic employers and text.",
+  "cases": [
+    {
+      "id": "syn-001",
+      "incident_shape": "A1 template residue (cross-fork contamination)",
+      "rule": "template-residue",
+      "artifact_kind": "CL",
+      "dir": "a1_residue",
+      "before": {"file": "CoverLetter_Fabrikam_before.md", "detail": "Fabrikam letter carrying an Acme-only sentence (platform-side claim) - mirrors 'ACME phrase in Fabrikam letter'"},
+      "after": {"file": "CoverLetter_Fabrikam_after.md", "detail": "clean Fabrikam letter (Acme sentence removed, replaced with a Fabrikam-relevant line)"},
+      "expect": {"before": {"min_hits": 1}, "after": {"max_hits": 0}}
+    },
+    {
+      "id": "syn-002",
+      "incident_shape": "A2 cross-block dupe",
+      "rule": "cross-block-dupe",
+      "dir": "a2_dupe",
+      "before": {"file": "CoverLetter_dupe_before.md", "detail": "same claim ('worked independently' + governance sentence) repeated in two content blocks"},
+      "after": {"file": "CoverLetter_dupe_after.md", "detail": "merged single statement"},
+      "expect": {"before": {"min_hits": 1}, "after": {"max_hits": 0}}
+    },
+    {
+      "id": "syn-003",
+      "incident_shape": "A3 number provenance",
+      "rule": "number-provenance",
+      "dir": "a3_number",
+      "before": {"file": "Resume_before.md", "detail": "contains 'seven procurement packages' (not in the provenance ledger - synthetic mirror of the original incident)"},
+      "after": {"file": "Resume_after.md", "detail": "self-evidencing enumeration instead of the bare number"},
+      "expect": {"before": {"min_hits": 1}, "after": {"max_hits": 0}}
+    },
+    {
+      "id": "syn-004",
+      "incident_shape": "A4 claim verification (checklist entity absent from JD body)",
+      "rule": "claim-verification",
+      "dir": "a4_claim",
+      "before": {"file": "JD_before.md", "detail": "checklist requires the 'Fabrikam Academy online assessment' but the JD body never mentions it (template contamination)"},
+      "after": {"file": "JD_after.md", "detail": "JD body explicitly includes the assessment requirement (natural positive control)"},
+      "expect": {"before": {"min_hits": 1}, "after": {"max_hits": 0}}
+    },
+    {
+      "id": "syn-005",
+      "incident_shape": "A5 ledger consistency (deprecated phrasing revival)",
+      "rule": "cl-resume-consistency",
+      "dir": "a5_consistency",
+      "before": {"file": "CoverLetter_years_before.md", "detail": "contains 'eleven years in technology' (deprecated by the ledger decision)"},
+      "after": {"file": "CoverLetter_years_after.md", "detail": "replaced with 'since 2011' phrasing"},
+      "expect": {"before": {"min_hits": 1}, "after": {"max_hits": 0}}
+    }
+  ]
+}

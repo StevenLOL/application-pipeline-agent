@@ -1,0 +1,22 @@
+# PII / large files (docs/08 §10: data/ and models/ are not committed)
+data/
+models/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# local runtime state (SQLite, etc.)
+*.db
+*.sqlite3
+
+# system
+.DS_Store
+Thumbs.db
